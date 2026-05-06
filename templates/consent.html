@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Consent Required — Demo Link</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width:720px; margin:40px auto; line-height:1.5; }
+    .card { border:1px solid #ddd; padding:20px; border-radius:6px; }
+    button { padding:10px 16px; font-size:16px; margin-right:8px; }
+    .muted { color:#666; font-size:0.9em; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Consent required</h2>
+    <p>
+      You are about to share your public IP address and, optionally, your device's precise location with the demo operator.
+      This is an educational demonstration. Do not proceed unless you give explicit consent.
+    </p>
+    <p class="muted">
+      The operator will see your public IP and approximate location. If you click "I consent" your browser will prompt
+      whether you allow sharing precise location data — you may decline that prompt and still proceed; only the server will record your IP.
+    </p>
+    <p><strong>Link token:</strong> <span id="token">{{ token }}</span></p>
+    <p>
+      <button id="consentBtn">I consent — share my info</button>
+      <button id="declineBtn">I do not consent</button>
+    </p>
+    <div id="status" aria-live="polite"></div>
+  </div>
+
+  <script>
+    const token = document.getElementById('token').textContent;
+    const status = document.getElementById('status');
+    const consentBtn = document.getElementById('consentBtn');
+    const declineBtn = document.getElementById('declineBtn');
+
+    declineBtn.onclick = () => {
+      status.textContent = "You declined. No data will be sent. Thank you.";
+    };
+
+    consentBtn.onclick = async () => {
+      status.textContent = "Asking browser for permission to access location (you will see a browser prompt).";
+      let browserGeo = null;
+      if (navigator.geolocation) {
+        try {
+          const pos = await new Promise((res, rej) =>
+            navigator.geolocation.getCurrentPosition(res, rej, {enableHighAccuracy: false, timeout: 10000})
+          );
+          browserGeo = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        } catch (e) {
+          browserGeo = null;
+        }
+      }
+
+      status.textContent = "Sending consent and data to server...";
+      try {
+        const resp = await fetch(`/l/${token}/accept`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ browserGeo })
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          status.innerHTML = "<strong>Thank you.</strong> Your consent and data were recorded for this demo.";
+          if (data.browserGeo) {
+            status.innerHTML += `<div>Browser-provided location: ${JSON.stringify(data.browserGeo)}</div>`;
+          } else {
+            status.innerHTML += `<div>No browser location shared (you may have denied it). Server recorded IP: ${data.ip}</div>`;
+          }
+        } else {
+          status.textContent = "Server did not accept the consent request.";
+        }
+      } catch (err) {
+        status.textContent = "Error sending data to server: " + err;
+      }
+    };
+  </script>
+</body>
+</html>
